@@ -1,0 +1,23 @@
+import:
+   - ~/.config/alacritty/catppuccin.yml
+window:
+  # Window opacity as a floating point number from `0.0` to `1.0`.
+  opacity: 0.8
+
+  # Window title
+  title: Arachne
+  # Allow terminal applications to change Alacritty's window title.
+  dynamic_title: true
+
+scrolling:
+  # Scrolling distance multiplier.
+  multiplier: 5
+
+# Font configuration
+font:
+  # Point size
+  size: 20.0
+
+colors:
+  primary:
+    background: '#181825'
