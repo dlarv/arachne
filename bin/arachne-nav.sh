@@ -2,7 +2,7 @@
 #shellcheck source=/dev/null
 
 function _match_arg() {
-	grep -m 1 -E "^$1" "$CONFIG_FILE" | sed -E "s/.*(=|:)\s*//;s/\$HOME/~/;s|~|$HOME|"
+	grep -m 1 -E "^$1" "$CONFIG_FILE" | sed -E "s/.*(=|:)\s*//;s/\$HOME/~/;s|~|$HOME|;s/\"//g"
 }
 
 # $1 is the parent path
@@ -39,26 +39,61 @@ function _resolve_path() {
 	done
 	return 1
 }
-function _help() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Arachne config file could not be found. Exiting."
-        return
+function _add_shortcut() {
+	local shortcut target
+
+	# Get shortcut name
+	shortcut="$1"
+	if [ -z "$1" ]; then
+		echo -n "Enter shortcut name: "
+		read shortcut 
+		if [ -z "$shortcut" ]; then 
+			echo "User cancelled command."
+			return 1
+		fi
 	fi
 
-    if [ -n "$1" ]; then
-        echo "Provides a shorthand to {$1} into the following dirs:"
-    else
-        echo "Arachne shorthand:"
-    fi
+	# Get path targeted by shortcut 
+	if [ -z "$2" ]; then 
+		read -ep "Enter target path (default="."): " target 
+	else
+		target="$2"
+	fi
 
-	cat "$CONFIG_FILE"
+	# Make sure target is a valid path 
+	if [ -z "$target" ]; then 
+		target="$PWD"
+	elif [ ! -d "$target" ]; then
+		if [ -e "$PWD/$target" ]; then
+			target="$PWD/$target"
+		else
+			echo "Could not add shortcut. \"$target\" is not a directory"
+			return 1
+		fi 
+	fi
+	# Change $HOME to '~'
+	# This allows config file to be portable
+	target="$(sed "s|$HOME|~|" <<< "$target")"
+	echo "$shortcut = \"$target\"" >> "$CONFIG_FILE"
+}
+function _rm_shortcut() {
+	local shortcut 
+
+	# Get shortcut name
+	shortcut="$1"
+	if [ -z "$1" ]; then
+		echo -n "Enter shortcut to delete: "
+		read shortcut 
+		if [ -z "$shortcut" ]; then 
+			echo "User cancelled command."
+			return 1
+		fi
+	fi
+	sed -i "/$shortcut/d" "$CONFIG_FILE"
 }
 
 function _arachne_jump() {
-    if [[ "$1" =~ ^()$|(^(-)*h(elp)*$) ]]; then
-        _help 'cd'
-		return 0
-    elif [[ "$1" =~ ^-(b|-back) ]]; then
+    if [[ "$1" =~ ^-(b|-back) ]]; then
         popd || return 1
 		return 0
 	fi
@@ -113,18 +148,107 @@ function _arachne_look() {
 	echo "Looking at: $target"
 	ls "$target"
 }
-CONFIG_FILE="$MYTHOS_LOCAL_CONFIG_DIR/arachne/nav.conf"
+function _print_shortcuts() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Arachne config file could not be found. Exiting."
+        return 1
+	fi
+    if [ -n "$1" ]; then
+        echo "Provides a shorthand to {$1} into the following dirs:"
+    else
+        echo "Arachne shorthand:"
+    fi
+
+	cat "$CONFIG_FILE"
+}
+function _help() {
+	case "$1" in
+		'jump' | 'look' | 'back') _print_shortcuts "$1" ;;
+		'add') 
+			echo "arachne-nav -a [shortcut] [path]"
+			echo "Appends new shortcut to bottom of arachne config file."
+			echo "If either shortcut or path are left empty, user will be prompted for input."
+			;;
+		'remove')
+			echo "arachne-nav -r [shortcut]"
+			echo "Removes shortcut from config file."
+			echo "If the shortcut is omitted, user will be prompted for input."
+			echo "Internally, this command uses sed -i '/\$shortcut/d' to edit config file. This change cannot be undone."
+			;;
+		*)
+			echo "arachne-nav -j|-l|-b [shortcut] [subdirs]"
+			echo "arachne-nav -a [shortcut] [path]"
+			echo "arachne-nav -r [shortcut]"
+			echo "NOTE: For commands like cd/pushd to work, the script needs to be run directly. Therefore, arachne's should be defined as aliases. e.g. alias ajump=\"./\$MYTHOS_BIN_DIR/arachne-nav -j\""
+			echo "Opts:"
+			echo -e "-h | --help\t\tPrint this menu."
+			echo -e "-p | --print\t\tPrint list of shortcuts."
+			echo -e "-a | --add\t\tAdd new shortcut."
+			echo -e "-r | --rm\t\tRemove shortcut."
+			echo -e "-j | --jump\t\tJump to shortcut. Wrapper for pushd."
+			echo -e "-b | --back\t\tWrapper for popd."
+			echo -e "-l | --look\t\tLook inside shortcut. Wrapper for ls."
+	esac
+}
+
+function main() {
+	local print_help nav_mode edit_config_mode args
+	args=()
+	for arg in $(mythos-args "$@"); do 
+		if [[ "$arg" =~ ^-(p|-print)$ ]]; then
+			_print_shortcuts
+			return 0
+		elif [[ "$arg" =~ ^-(h|-help)$ ]]; then
+			print_help=1
+		elif [[ ! "$arg" =~ ^-.* ]]; then  
+			args+=("$arg")
+		elif [[ "$arg" =~ ^-(a|-add)$ ]]; then
+			edit_config_mode="add"
+		elif [[ "$arg" =~ ^-(r|(-r(m|emove)))$ ]]; then
+			edit_config_mode="rm"
+		elif [[ "$arg" =~ ^-(l|-look)$ ]]; then
+			nav_mode="look"
+		elif [[ "$arg" =~ ^-(j|-jump)$ ]]; then
+			nav_mode="jump"
+		elif [[ "$arg" =~ ^-(b|-back)$ ]]; then
+			nav_mode="back"
+		else 
+			>&2 echo "Unknown opt: $arg"
+			return 1
+		fi
+	done
+
+	local mode
+	# edit_mode > nav_mode
+	mode="${edit_config_mode:-$nav_mode}"
+	if [ -n "$print_help" ]; then
+		_help "$mode"
+	# edit_mode and -b can have empty args, nav_mode cannot
+	elif [ "$edit_config_mode" == "add" ]; then
+		_add_shortcut "${args[@]}"
+	elif [ "$edit_config_mode" == "rm" ]; then
+		_rm_shortcut "${args[@]}"
+	elif [ "$nav_mode" == "back" ]; then
+		_arachne_jump '-b' "${args[@]}"
+	elif [ -z "${args[*]}" ]; then 
+		_help "$mode"
+	elif [ "$nav_mode" == "jump" ]; then
+		_arachne_jump "${args[@]}"
+	elif [ "$nav_mode" == "look" ]; then
+		_arachne_look "${args[@]}"
+	else 
+		>&2 echo "Please provide a mode (-l|-j|-a|-r)."
+		return 1
+	fi
+}
+
+CONFIG_FILE="$(mythos-dirs 'config' 'arachne')/nav.conf"
 
 # For commands like cd to work, file needs to be run directly. 
 # Therefore, arachne's commands are defined inside arachne_vars.sh as aliases. 
+
 # Prevents "dir/*" from returning a literal "*" if "dir" is empty
 # https://mywiki.wooledge.org/ParsingLs
 shopt -s nullglob
-if [ -z "$1" ] || [[ "$1" =~ ^-(h|-help) ]] || [[ "$2" =~ ^-(h|-help) ]]; then
-    _help
-elif [ "$1" == "jump" ]; then
-    _arachne_jump "${@:2}"
-elif [ "$1" == "look" ]; then
-    _arachne_look "${@:2}"
-fi
+main "$@"
 unset CONFIG_FILE
