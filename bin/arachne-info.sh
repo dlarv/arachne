@@ -12,7 +12,10 @@ function main() {
 }
 
 if [[ "$1" =~ ^-(h|-help)$ ]]; then
-    echo "Wrapper for du"
+    echo "Wrapper for du -csh"
+	echo "-c: Total Memory"
+	echo "-s: Summarize"
+	echo "-h: Human Readable"
 else
     main "$@"
 fi
