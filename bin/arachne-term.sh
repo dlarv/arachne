@@ -1,41 +1,49 @@
 #!/bin/bash
 #shellcheck source=/dev/null
 # Open terminal based on currently focused program
-function _get_config() 
-{
-    local confDir
-    confDir="$(mythos-dir conf arachne)/arachne.conf"
-    local file="$(cat "$confDir")"
-    file="${file/*\[terminal\]/}"
-    while read -ra line; do 
-        
-        if [ -z "${line[*]}" ]; then continue; fi
-        line="$(echo "${line[*]}" | sed -E "s/(=|:)//g")"
+# Gets program name and pid from arachne-launcher
+# Parses config file to find appropriate working directory 
+# Outputs working directory to arachne-launcher 
 
-        if [[ "$line" =~ ^\[.*\]$ ]]; then
-            break 
-        fi
-        # Remove = or : to make parsing easier
-        if grep -qi "$(awk '{ print $1 }' <<< "$line")" <<< "$1"; then
-            awk '{ print $2 }' <<< "$line"
-            break 
-        fi
+function _get_config() {
+	local window_name config_file key
+	config_file="$(mythos-dirs conf arachne)/term.conf"
+	window_name="$1"
 
-    done <<< "$file"
+	# Find key that best matches [title]
+	key="$(grep -m 1 -iE "^\[?$window_name" "$config_file" | sed -E "s/\s*(=|:).*//g")"
+	mythos-conf 'arachne/term.conf' "$key"
 }
-function main()
-{
-    local programDir
-    programDir="$(_get_config "$@")"
-    programDir="${programDir/'~'/$HOME}"
-    : ${programDir:=$HOME}
-    # "" must be stripped from path
-    alacritty -v --working-directory "${programDir//\"/}" --config-file "$HOME/.config/mythos/arachne/arachne.yml" 
+function main() {
+	local name pid value
+	name="$1"
+	pid="$2"
+	value="$(_get_config "$name")"
+
+	if [ -z "$value" ]; then
+		>&2 echo "Could not find program in config file"
+		return 1
+	elif [ -d "$value" ]; then 
+		echo "$value"
+		return 0
+	fi 
+
+	local lib_dir
+	lib_dir="$(mythos-dirs "lib" "arachne")"
+	if [ -x "$lib_dir/$value" ]; then
+		. "$lib_dir/$value" "$name" "$pid"
+		return $?
+	elif [ -d "$HOME/$value" ]; then
+		echo "$value"
+		return 0
+	fi 
+	>&2 echo "Config value '$value' not recognized."
+	return 1
 }
 
 
 if [[ "$1" =~ -(h|-help)$ ]]; then
     echo "help"
-elif [ -n "$1" ]; then
-    main "$@"
+else 
+	main "$@"
 fi
