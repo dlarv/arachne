@@ -1,5 +1,6 @@
-@ LC C
+@ LC C LB
 bin/* $B 755oe 
 config/* $C o 
 config/* $LC 
+lib/* $LB 755oe
 arachne-vars.sh $A 755o

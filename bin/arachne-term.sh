@@ -5,20 +5,26 @@
 # Parses config file to find appropriate working directory 
 # Outputs working directory to arachne-launcher 
 
+function _get_active_window() {
+	# This will be swaywm specific
+	focusedWindow="$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true)')"
+	NAME="$(echo "$focusedWindow" | grep "name" | awk '{print $2}' | grep -o '\S*"')"
+	PID="$(echo "$focusedWindow" | grep "pid" | grep -o '[0-9]*')"
+}
+
 function _get_config() {
 	local window_name config_file key
 	config_file="$(mythos-dirs conf arachne)/term.conf"
-	window_name="$1"
+	window_name="${1//\"/}"
 
 	# Find key that best matches [title]
-	key="$(grep -m 1 -iE "^\[?$window_name" "$config_file" | sed -E "s/\s*(=|:).*//g")"
-	mythos-conf 'arachne/term.conf' "$key"
+	grep -m 1 -iE "^$window_name" "$config_file" | grep -Eo '".*"' | sed 's/\"//g'
 }
 function main() {
-	local name pid value
-	name="$1"
-	pid="$2"
-	value="$(_get_config "$name")"
+	export PID NAME
+	local value
+	_get_active_window
+	value="$(_get_config "${NAME,,}")"
 
 	if [ -z "$value" ]; then
 		>&2 echo "Could not find program in config file"
@@ -31,7 +37,8 @@ function main() {
 	local lib_dir
 	lib_dir="$(mythos-dirs "lib" "arachne")"
 	if [ -x "$lib_dir/$value" ]; then
-		. "$lib_dir/$value" "$name" "$pid"
+		. "$lib_dir/$value" "$NAME" "$PID"
+		unset NAME PID
 		return $?
 	elif [ -d "$HOME/$value" ]; then
 		echo "$value"
