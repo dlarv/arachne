@@ -21,10 +21,9 @@ function _get_active_window() {
 function _get_config() {
 	local window_name config_file key
 	config_file="$(mythos-dirs conf arachne)/term.conf"
-	window_name="${1//\"/}"
 
 	# Find key that best matches [title]
-	grep -m 1 -iE "^$window_name" "$config_file" | grep -Eo '".*"'
+	grep -m 1 -iE "^$NAME" "$config_file" | grep -Eo '".*"' | sed 's/"//g'
 }
 function _get_working_directory() {
 	local value
@@ -35,15 +34,17 @@ function _get_working_directory() {
 		swaymsg 'kill'
 		return 2
 	elif [ -z "$NAME" ]; then 
-		>&2 echo "No entry in config file matched active window: $NAME"
-		return 1
+		>&2 echo "Window name was empty"
+		WORKING_DIR="$HOME"
+		return 0
 	fi
 
 	value="$(_get_config "$NAME")"
 
 	if [ -z "$value" ]; then
 		>&2 echo "No entry in config file matched active window: $NAME"
-		return 1
+		WORKING_DIR="$HOME"
+		return 0
 	elif [ -d "$value" ]; then 
 		WORKING_DIR="$value"
 		return 0
@@ -54,23 +55,26 @@ function _get_working_directory() {
 	if [ -x "$lib_dir/$value" ]; then
 		WORKING_DIR="$(. "$lib_dir/$value" "$NAME" "$PID")"
 		return $?
-	elif [ -d "$HOME/$value" ]; then
+	elif [ -d "$value" ]; then
 		WORKING_DIR="$value"
 		return 0
+	elif [ -d "$HOME/$value" ]; then
+		WORKING_DIR="$HOME/$value"
+		return 0
 	fi 
-	>&2 echo "No entry in config file matched active window: $NAME"
-	return 1
+	>&2 echo "An error occurred"
+	WORKING_DIR="$HOME"
 }
 
 function _open_term() {
-	alacritty --config-file "$HOME/.config/mythos/arachne/arachne.yml" --working-directory "$WORKING_DIR" 
+	alacritty --config-file "$HOME/.config/mythos/arachne/arachne.toml" --working-directory "$WORKING_DIR" 
 }
 
 function main() {
 	local dir
-	_get_working_directory || return 1
+	_get_working_directory || return 2
 	# Move arachne-term to active workspace or start one if one DNE.
-	swaymsg '[title="Arachne"] move workspace' "$(swaymsg -t get_workspaces | jq '.. | select(.type?) | select(.focused==true) | .name')"  || _open_term")"
+	swaymsg '[title="Arachne"] move workspace' "$(swaymsg -t get_workspaces | jq '.. | select(.type?) | select(.focused==true) | .name')"  || _open_term ")"
 	# Focus on arachne-term
 	swaymsg '[title="Arachne"] focus'
 }
