@@ -1,0 +1,15 @@
+import = ["/home/hyrum/.config/alacritty/catppuccin.toml"]
+
+[colors.primary]
+background = "#181825"
+
+[font]
+size = 20.0
+
+[scrolling]
+multiplier = 5
+
+[window]
+dynamic_title = true
+opacity = 0.8
+title = "Arachne"
