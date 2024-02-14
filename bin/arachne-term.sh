@@ -22,9 +22,23 @@ function _get_config() {
 	local window_name config_file key
 	config_file="$(mythos-dirs conf arachne)/term.conf"
 
-	# Find key that best matches [title]
-	grep -m 1 -iE "^$NAME" "$config_file" | grep -Eo '".*"' | sed 's/"//g'
+	# Use keys from config as match pattern
+	# firefox = "value"
+	# Tab that is open - Mozilla FireFox
+	while read line; do
+		# Get keys
+		key="$(grep -Po '^.*(?==|:)' <<< "$line" | sed 's/\s*$//;s/^\s*//')"
+		
+		# Find key inside NAME
+		if grep -iq "$key" <<< "$NAME"; then 
+			# Return value contained within "quotes" 
+			grep -m 1 -i "^$key" <<< "$line" | grep -Po '(?<=").*(?=")'
+			break
+		fi
+
+	done < "$config_file"
 }
+
 function _get_working_directory() {
 	local value
 	_get_active_window
@@ -52,8 +66,10 @@ function _get_working_directory() {
 
 	local lib_dir
 	lib_dir="$(mythos-dirs "lib" "arachne")"
+
 	if [ -x "$lib_dir/$value" ]; then
 		WORKING_DIR="$(. "$lib_dir/$value" "$NAME" "$PID")"
+		echo "$WORKING_DIR"
 		return $?
 	elif [ -d "$value" ]; then
 		WORKING_DIR="$value"
@@ -73,14 +89,20 @@ function _open_term() {
 function main() {
 	local dir
 	_get_working_directory || return 2
+
 	# Move arachne-term to active workspace or start one if one DNE.
 	swaymsg '[title="Arachne"] move workspace' "$(swaymsg -t get_workspaces | jq '.. | select(.type?) | select(.focused==true) | .name')"  || _open_term ")"
+
 	# Focus on arachne-term
 	swaymsg '[title="Arachne"] focus'
 }
 
 if [[ "$1" =~ -(h|-help)$ ]]; then
-    echo "help"
+    echo "Opens an alacritty terminal. The working directory is determined by the active window."
+	echo "Config file:"
+	echo "key = \"path/to/file\" -> CWD is \$HOME/path/to/file"
+	echo "key = \"/path/to/file\" -> CWD is /path/to/file"
+	echo "key = \"value\" -> Program executes \$MYTHOS_LIB_DIR/arachne/value. CWD is value echoed by this script."
 else 
 	export NAME PID WORKING_DIR
 	main "$@"
