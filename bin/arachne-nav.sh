@@ -101,7 +101,15 @@ function _arachne_jump() {
 	local target
 	target="$(_match_arg "$1")"
 	if [ -z "$target" ]; then
-		echo "Cannot jump to $1, directory not found."
+		if [ -d "$1" ]; then 
+			pushd "$1" ||	return 1
+		elif [ -f "$1" ]; then 
+			pushd "$(dirname "$1")" ||	return 1
+		else 
+			echo "Cannot jump to $1, directory not found."
+			return 1
+		fi
+		return 0
 	fi
 	# resolve remaining args 
 	shift
