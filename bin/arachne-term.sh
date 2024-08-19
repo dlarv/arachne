@@ -21,14 +21,13 @@ function _get_active_window() {
 function _get_config() {
 	local window_name config_file key
 	config_file="$(mythos-dirs conf arachne)/term.conf"
-
 	# Use keys from config as match pattern
 	# firefox = "value"
 	# Tab that is open - Mozilla FireFox
 	while read line; do
 		# Get keys
 		key="$(grep -Po '^.*(?==|:)' <<< "$line" | sed 's/\s*$//;s/^\s*//')"
-		
+
 		# Find key inside NAME
 		if grep -iq "$key" <<< "$NAME"; then 
 			# Return value contained within "quotes" 
@@ -83,7 +82,7 @@ function _get_working_directory() {
 }
 
 function _open_term() {
-	alacritty --config-file "$HOME/.config/mythos/arachne/arachne.toml" --working-directory "$WORKING_DIR" 
+	alacritty -T "Arachne" --config-file "$HOME/.config/mythos/arachne/arachne.toml" --working-directory "$WORKING_DIR" 
 }
 
 function main() {
@@ -105,6 +104,6 @@ if [[ "$1" =~ -(h|-help)$ ]]; then
 	echo "key = \"value\" -> Program executes \$MYTHOS_LIB_DIR/arachne/value. CWD is value echoed by this script."
 else 
 	export NAME PID WORKING_DIR
-	main "$@"
+	main "$@" 
 	unset NAME PID WORKING_DIR
 fi
